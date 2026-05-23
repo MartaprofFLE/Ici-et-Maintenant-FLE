@@ -1,0 +1,1607 @@
+
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Le Présent de l'Indicatif — Jeux FLE A1</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js">
+// ─── NO COPY-PASTE ─────────────────────────────────
+document.addEventListener('copy',  e => e.preventDefault());
+document.addEventListener('cut',   e => e.preventDefault());
+document.addEventListener('paste', e => {
+  // allow paste only in fill-inputs
+  if(!e.target.classList.contains('fill-input')) e.preventDefault();
+});
+document.addEventListener('contextmenu', e => e.preventDefault());
+document.addEventListener('keydown', e => {
+  if ((e.ctrlKey||e.metaKey) && ['c','x','a','u','s','p'].includes(e.key.toLowerCase())) {
+    if (!e.target.classList.contains('fill-input')) e.preventDefault();
+  }
+  if (e.key==='F12' || (e.ctrlKey&&e.shiftKey&&['i','j','c'].includes(e.key.toLowerCase()))) e.preventDefault();
+});
+
+// ─── LOCK SYSTEM ───────────────────────────────────
+const PASS = 0.6;
+function passedJ1(){ const r=window.__results.j1; return r && r.score/r.total>=PASS; }
+function passedJ2(){ const r=window.__results.j2; return r && r.score/r.total>=PASS; }
+function passedJ3(){ const r=window.__results.j3; return r && r.score/r.total>=PASS; }
+function passedOral(){ const r=window.__results.oral; return r && r.score/r.total>=PASS; }
+
+function updateLocks(){
+  setLock('j1-lock-overlay', !theoryVisited);
+  setLock('j2-lock-overlay', !passedJ1());
+  setLock('j3-lock-overlay', !passedJ2());
+  setLock('oral-lock-overlay', !passedJ3());
+  styleLockedTab('tab-jeu1', !theoryVisited);
+  styleLockedTab('tab-jeu2', !passedJ1());
+  styleLockedTab('tab-jeu3', !passedJ2());
+  styleLockedTab('tab-oral', !passedJ3());
+  styleLockedTab('tab-lliurar', !passedOral());
+}
+function setLock(id, locked){
+  const el = document.getElementById(id);
+  if(!el) return;
+  el.style.display = locked ? 'flex' : 'none';
+  const card = el.parentElement;
+  if(card){
+    card.style.pointerEvents = locked ? 'none' : '';
+    card.style.userSelect = locked ? 'none' : '';
+    // re-enable the overlay itself so it's visible/clickable
+    el.style.pointerEvents = 'auto';
+  }
+}
+function styleLockedTab(tabId, locked){
+  const t = document.getElementById(tabId);
+  if(!t) return;
+  t.style.opacity = locked ? '0.4' : '1';
+  t.style.cursor = locked ? 'not-allowed' : '';
+  t.style.pointerEvents = locked ? 'none' : '';
+  t.title = locked ? 'Cal superar el joc anterior amb ≥60%' : '';
+  // show/hide lock icon in tab
+  const hasIcon = t.dataset.origText;
+  if(!hasIcon) t.dataset.origText = t.textContent;
+  t.textContent = locked ? '🔒 ' + t.dataset.origText : t.dataset.origText;
+}
+
+// ─── ORAL MCQ ──────────────────────────────────────
+const joData = [
+  {q:"Comment s'appelle le personnage principal du texte ?",
+   opts:["Marc","Lucas","Théo","Paul"], ans:1},
+  {q:"Quel âge a Lucas ?",
+   opts:["onze ans","douze ans","treize ans","quatorze ans"], ans:2},
+  {q:"À quelle heure Lucas se lève-t-il le matin ?",
+   opts:["à six heures","à sept heures","à huit heures","à neuf heures"], ans:1},
+  {q:"Comment Lucas va-t-il au collège ?",
+   opts:["en voiture","à vélo","à pied","en bus"], ans:3},
+  {q:"Quel sport Lucas aime-t-il ?",
+   opts:["le basket","le tennis","la natation","le football"], ans:3},
+  {q:"À quelle heure Lucas dort-il ?",
+   opts:["à vingt heures","à vingt et une heures","à vingt-deux heures","à vingt-trois heures"], ans:2},
+];
+let joIdx=0, joOk=0, joStarted=false;
+
+function buildJO(){
+  if(joIdx>=joData.length){ endJO(); return; }
+  // hide text once started
+  if(!joStarted){ joStarted=true; hideOralText(); }
+  const q=joData[joIdx];
+  const c=document.getElementById('jo-container');
+  c.innerHTML=`
+    <div class="q-text" style="margin-bottom:14px">
+      Question ${joIdx+1} / ${joData.length}<br>
+      <strong style="font-size:1.05rem">${q.q}</strong>
+    </div>
+    <div class="mcq-opts">
+      ${q.opts.map((o,i)=>`<button class="mcq-btn" onclick="answerJO(${i})">${o}</button>`).join('')}
+    </div>
+    <div class="fb" id="jo-fb"></div>`;
+}
+function hideOralText(){
+  const t=document.getElementById('oral-text-visible');
+  if(t) t.style.display='none';
+  const btn=document.getElementById('toggle-text-btn');
+  if(btn){ btn.textContent='👁 Mostra el text'; }
+}
+function toggleOralText(){
+  const t=document.getElementById('oral-text-visible');
+  const btn=document.getElementById('toggle-text-btn');
+  if(!t||!btn) return;
+  if(t.style.display==='none'||t.style.display===''){
+    t.style.display='block';
+    btn.textContent='🙈 Amaga el text';
+  } else {
+    t.style.display='none';
+    btn.textContent='👁 Mostra el text';
+  }
+}
+function answerJO(chosen){
+  const q=joData[joIdx];
+  if(!window.__joAnswers) window.__joAnswers={};
+  window.__joAnswers[joIdx]=chosen;
+  const btns=document.querySelectorAll('#jo-container .mcq-btn');
+  btns.forEach(b=>b.disabled=true);
+  const fb=document.getElementById('jo-fb');
+  if(chosen===q.ans){
+    joOk++;
+    btns[chosen].classList.add('correct');
+    fb.className='fb show ok'; fb.textContent='✓ Bravo !';
+  } else {
+    btns[chosen].classList.add('wrong');
+    btns[q.ans].classList.add('correct');
+    fb.className='fb show ko'; fb.textContent=`✗ La bonne réponse : ${q.opts[q.ans]}`;
+  }
+  updateJOScore();
+  setTimeout(()=>{ joIdx++; buildJO(); },1400);
+}
+function endJO(){
+  document.getElementById('jo-container').innerHTML='';
+  window.__results.oral={score:joOk,total:joData.length};
+  recordAttempt('oral',joOk,joData.length);
+  updateLocks();
+  showResult('jo',joOk,joData.length);
+  updateLocks();
+}
+function updateJOScore(){
+  document.getElementById('jo-score').textContent=`${joOk} / ${joData.length}`;
+  document.getElementById('jo-prog').style.width=`${joOk/joData.length*100}%`;
+}
+
+// ─── PATCH showPanel to trigger oral start ─────────
+const _origShowPanel = showPanel;
+window.showPanel = function(id, btn){
+  _origShowPanel(id, btn);
+  if(id==='oral' && !joStarted && joIdx===0){
+    buildJO();
+  }
+};
+
+
+// ─── TEXT TO SPEECH ────────────────────────────────
+const ORAL_TEXT = `Je m'appelle Lucas. J'ai treize ans et j'habite à Lyon avec ma famille. Le matin, je me lève à sept heures. Je mange des céréales et je bois un jus d'orange. Puis je prends le bus avec mon ami Théo. Nous arrivons au collège à huit heures et quart.
+À l'école, j'ai des cours de maths, de français et d'anglais. Mon professeur de maths s'appelle Monsieur Dupont. Il explique très bien. Le midi, je mange à la cantine avec mes amis. Nous mangeons de la salade, du poulet et des fruits.
+L'après-midi, je fais du sport. J'aime beaucoup le football. Mon équipe s'entraîne le mardi et le jeudi. Le soir, je fais mes devoirs et je lis un livre. Ma sœur, elle, regarde la télévision. À vingt et une heures, toute la famille dîne ensemble. Nous parlons de notre journée. Je dors à vingt-deux heures. C'est une journée bien chargée !`;
+
+let ttsSpeaking = false;
+
+function readOralText(){
+  if(!('speechSynthesis' in window)){
+    alert("El teu navegador no admet la lectura en veu alta. Prova Chrome o Edge.");
+    return;
+  }
+  const btn = document.getElementById('tts-btn');
+  if(ttsSpeaking){
+    window.speechSynthesis.cancel();
+    ttsSpeaking = false;
+    btn.textContent = '🔊 Escolta el text';
+    return;
+  }
+  window.speechSynthesis.cancel();
+  const utter = new SpeechSynthesisUtterance(ORAL_TEXT);
+  utter.lang = 'fr-FR';
+  utter.rate = 0.88;
+  utter.pitch = 1;
+  // pick a French voice if available
+  const voices = window.speechSynthesis.getVoices();
+  const frVoice = voices.find(v => v.lang.startsWith('fr'));
+  if(frVoice) utter.voice = frVoice;
+  utter.onstart = () => {
+    ttsSpeaking = true;
+    btn.textContent = '⏹ Atura la lectura';
+  };
+  utter.onend = utter.onerror = () => {
+    ttsSpeaking = false;
+    btn.textContent = '🔊 Escolta el text';
+  };
+  window.speechSynthesis.speak(utter);
+}
+// voices load async in some browsers
+window.speechSynthesis.onvoiceschanged = () => {};
+
+
+// ─── ACCORDION ─────────────────────────────────────
+function toggleAccord(btn){
+  const body = btn.nextElementSibling;
+  const arrow = btn.querySelector('.accord-arrow');
+  const open = body.classList.toggle('open');
+  arrow.style.transform = open ? 'rotate(180deg)' : '';
+  btn.setAttribute('aria-expanded', open);
+}
+
+
+// ─── LOCALSTORAGE AUTOSAVE ──────────────────────────
+const LS_KEY = 'presentIndicatif_v1';
+
+function saveProgress(){
+  const data = {
+    name: document.getElementById('studentName').value || '',
+    group: document.getElementById('studentGroup').value || '',
+    theoryVisited,
+    results: window.__results,
+    joAnswers: window.__joAnswers || {},
+    attempts: window.__attempts || {},
+    savedAt: new Date().toISOString()
+  };
+  try { localStorage.setItem(LS_KEY, JSON.stringify(data)); } catch(e){}
+}
+
+function loadProgress(){
+  try {
+    const raw = localStorage.getItem(LS_KEY);
+    if(!raw) return;
+    const data = JSON.parse(raw);
+    if(data.name) document.getElementById('studentName').value = data.name;
+    if(data.group) document.getElementById('studentGroup').value = data.group;
+    if(data.theoryVisited) theoryVisited = true;
+    if(data.results) window.__results = data.results;
+    if(data.joAnswers) window.__joAnswers = data.joAnswers;
+    if(data.attempts) window.__attempts = data.attempts;
+    updateLocks();
+    buildSummary();
+    // If j1 was completed, restore visual score
+    if(data.results && data.results.j1) updateJ1Score(data.results.j1.score, data.results.j1.total);
+    // Always reset indices so games start from question 1
+    j2Idx = 0; j2Ok = 0; buildJ2();
+    j3Idx = 0; j3Ok = 0; buildJ3();
+    joIdx = 0; joOk = 0;
+    // Restore visual scores from saved results
+    if(data.results && data.results.j2) updateJ2Score();
+    if(data.results && data.results.j3) updateJ3Score();
+    if(data.results && data.results.oral) updateJOScore();
+    // Show restored banner
+    if(data.savedAt){
+      const d = new Date(data.savedAt);
+      const fmt = d.toLocaleDateString('ca-ES') + ' ' + d.toLocaleTimeString('ca-ES',{hour:'2-digit',minute:'2-digit'});
+      toast('Progrés restaurat · ' + fmt);
+    }
+  } catch(e){}
+}
+
+function clearProgress(){
+  if(!confirm('Segur que vols esborrar tot el progrés guardat?')) return;
+  localStorage.removeItem(LS_KEY);
+  location.reload();
+}
+
+// Track attempts per game
+function recordAttempt(game, score, total){
+  if(!window.__attempts) window.__attempts = {};
+  if(!window.__attempts[game]) window.__attempts[game] = [];
+  window.__attempts[game].push({
+    score, total,
+    pct: Math.round(score/total*100),
+    at: new Date().toLocaleTimeString('ca-ES',{hour:'2-digit',minute:'2-digit'})
+  });
+  saveProgress();
+}
+
+// Autosave on name/group input
+['studentName','studentGroup'].forEach(id=>{
+  document.getElementById(id).addEventListener('input', saveProgress);
+});
+
+</script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&family=DM+Sans:wght@300;400;500;600&display=swap');
+  :root{
+    --bg:#F7F3EE;
+    --card:#FFFCF8;
+    --ink:#2C2A26;
+    --ink-soft:#7A776F;
+    --line:#E2D9CC;
+    --sage:#6B8F6E;
+    --sage-l:#E4EEE5;
+    --terra:#B0714A;
+    --terra-l:#F5E9E0;
+    --slate:#5C7A8A;
+    --slate-l:#E0EBF0;
+    --honey:#C9A84C;
+    --honey-l:#FBF3DC;
+    --ok:#5E9E6A;
+    --ok-l:#DFF2E3;
+    --ko:#B85C5C;
+    --ko-l:#F9E0E0;
+    --radius:14px;
+    --shadow:0 4px 20px rgba(44,42,38,.07);
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--ink);
+    font-family:'DM Sans',system-ui,sans-serif;min-height:100vh}
+  /* HERO */
+  .hero{
+    background:linear-gradient(135deg,#2C2A26 0%,#4A3F2F 100%);
+    color:#F7F3EE;padding:52px 24px 40px;text-align:center;
+    position:relative;overflow:hidden;
+  }
+  .hero::before{
+    content:'';position:absolute;inset:0;
+    background:radial-gradient(ellipse at 30% 60%,rgba(107,143,110,.18) 0%,transparent 60%),
+               radial-gradient(ellipse at 80% 20%,rgba(176,113,74,.15) 0%,transparent 50%);
+  }
+  .hero-badge{
+    display:inline-block;font-size:.72rem;letter-spacing:.18em;text-transform:uppercase;
+    color:var(--honey);border:1px solid rgba(201,168,76,.4);
+    padding:5px 14px;border-radius:999px;margin-bottom:18px;position:relative;
+  }
+  .hero h1{
+    font-family:'Playfair Display',Georgia,serif;
+    font-size:clamp(2.2rem,5vw,3.6rem);font-weight:900;
+    line-height:1.1;position:relative;
+  }
+  .hero h1 em{color:var(--honey);font-style:normal}
+  .hero p{color:rgba(247,243,238,.7);font-size:1rem;margin-top:10px;position:relative}
+  /* ID FORM (Abans de començar) */
+  .id-block{
+    max-width:860px;margin:22px auto 0;
+    background:linear-gradient(135deg,#FFF8E8,#FFFCF5);
+    border:1px solid var(--honey);
+    border-radius:var(--radius);padding:18px 22px;
+    box-shadow:var(--shadow);
+  }
+  .id-block .warn{
+    font-size:.92rem;color:#7a4f00;font-weight:600;margin-bottom:10px;
+    font-family:'DM Sans',sans-serif;
+  }
+  .id-fields{display:grid;grid-template-columns:1fr 1fr;gap:14px;}
+  @media(max-width:600px){.id-fields{grid-template-columns:1fr;}}
+  .id-fields label{
+    display:flex;flex-direction:column;
+    font-weight:600;color:var(--ink);font-size:.9rem;
+    font-family:'DM Sans',sans-serif;
+  }
+  .id-fields input{
+    margin-top:6px;padding:9px 12px;
+    border:1px solid var(--line);border-radius:8px;
+    font-size:1rem;background:#fff;
+    font-family:'DM Sans',sans-serif;color:var(--ink);
+  }
+  .id-fields input:focus{outline:none;border-color:var(--slate);box-shadow:0 0 0 3px var(--slate-l);}
+  /* NAV */
+  nav.tabs{
+    display:flex;flex-wrap:wrap;justify-content:center;gap:8px;
+    padding:16px;background:var(--card);border-bottom:1px solid var(--line);
+    position:sticky;top:0;z-index:30;
+  }
+  nav.tabs button{
+    background:none;border:1.5px solid var(--line);color:var(--ink-soft);
+    border-radius:999px;padding:7px 18px;font-size:.9rem;cursor:pointer;
+    font-family:'DM Sans',sans-serif;transition:all .2s;font-weight:500;
+  }
+  nav.tabs button.active,nav.tabs button:hover{
+    background:var(--ink);color:#fff;border-color:var(--ink);
+  }
+  nav.tabs button.cta{
+    background:var(--honey-l);color:var(--honey);border-color:var(--honey);font-weight:700;
+  }
+  nav.tabs button.cta:hover{background:var(--honey);color:#fff;}
+  nav.tabs button.cta.active{background:var(--honey);color:#fff;border-color:var(--honey);}
+  /* LAYOUT */
+  main{max-width:860px;margin:0 auto;padding:32px 20px 60px}
+  section.panel{display:none}
+  section.panel.active{display:block}
+  /* SECTION HEADER */
+  .sec-head{display:flex;align-items:center;gap:14px;margin-bottom:24px;}
+  .sec-icon{
+    width:44px;height:44px;border-radius:12px;display:flex;align-items:center;
+    justify-content:center;font-size:1.4rem;flex-shrink:0;
+  }
+  .sec-head h2{font-family:'Playfair Display',serif;font-size:1.6rem;font-weight:700;}
+  /* THEORY CARD */
+  .theory-card{
+    background:var(--card);border:1px solid var(--line);border-radius:var(--radius);
+    padding:24px;box-shadow:var(--shadow);margin-bottom:24px;
+  }
+  .theory-card h3{
+    font-family:'Playfair Display',serif;font-size:1.1rem;color:var(--terra);
+    margin-bottom:12px;
+  }
+  /* CONJUGATION TABLE */
+  .conj-table{width:100%;border-collapse:collapse;font-size:.95rem}
+  .conj-table th{background:var(--ink);color:#fff;padding:9px 14px;
+    font-weight:500;text-align:left}
+  .conj-table td{padding:8px 14px;border-bottom:1px solid var(--line)}
+  .conj-table tr:nth-child(even) td{background:var(--bg)}
+  .conj-table .form{font-weight:600;color:var(--slate)}
+  .conj-table .example{color:var(--ink-soft);font-style:italic;font-size:.88rem}
+  /* PILL TAGS */
+  .pill{display:inline-block;padding:3px 10px;border-radius:999px;
+    font-size:.8rem;font-weight:500;margin:2px}
+  .pill-er{background:var(--sage-l);color:var(--sage)}
+  .pill-ir{background:var(--slate-l);color:var(--slate)}
+  .pill-re{background:var(--terra-l);color:var(--terra)}
+  .pill-irreg{background:var(--honey-l);color:var(--honey)}
+  /* GAME CARD */
+  .game-card{
+    background:var(--card);border:1px solid var(--line);border-radius:var(--radius);
+    padding:24px;box-shadow:var(--shadow);margin-bottom:24px;
+  }
+  .game-title{
+    font-family:'Playfair Display',serif;font-size:1.15rem;font-weight:700;
+    margin-bottom:4px;
+  }
+  .game-subtitle{color:var(--ink-soft);font-size:.88rem;margin-bottom:18px}
+  /* SCORE BAR */
+  .score-bar{
+    display:flex;align-items:center;gap:12px;margin-bottom:20px;
+    background:var(--bg);border-radius:10px;padding:10px 16px;
+  }
+  .score-label{font-size:.85rem;color:var(--ink-soft)}
+  .score-val{font-weight:700;font-size:1.1rem;color:var(--sage)}
+  .progress-wrap{flex:1;height:8px;background:var(--line);border-radius:4px;overflow:hidden}
+  .progress-fill{height:100%;background:var(--sage);border-radius:4px;transition:width .4s}
+  /* QUESTION BLOCK */
+  .q-block{margin-bottom:20px}
+  .q-text{font-size:1rem;margin-bottom:10px;font-weight:500}
+  .q-text em{font-style:normal;font-weight:700;color:var(--terra);
+    border-bottom:2px solid var(--terra-l)}
+  /* FILL INPUT */
+  .fill-wrap{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+  .fill-input{
+    border:2px solid var(--line);border-radius:8px;padding:8px 14px;
+    font-size:1rem;font-family:'DM Sans',sans-serif;color:var(--ink);
+    background:var(--bg);min-width:120px;outline:none;transition:border-color .2s;
+  }
+  .fill-input:focus{border-color:var(--slate)}
+  .fill-input.correct{border-color:var(--ok);background:var(--ok-l)}
+  .fill-input.wrong{border-color:var(--ko);background:var(--ko-l)}
+  .fill-after{font-size:1rem}
+  /* REORDER */
+  .words-pool{
+    display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px;min-height:44px;
+    background:var(--bg);border-radius:10px;padding:10px;
+    border:2px dashed var(--line);
+  }
+  .word-chip{
+    background:var(--card);border:1.5px solid var(--line);border-radius:8px;
+    padding:6px 14px;font-size:.95rem;cursor:grab;user-select:none;
+    transition:transform .15s,box-shadow .15s;
+  }
+  .word-chip:hover{transform:translateY(-2px);box-shadow:0 4px 12px rgba(44,42,38,.1)}
+  .word-chip.dragging{opacity:.4;transform:scale(.95)}
+  .sentence-drop{
+    min-height:44px;background:#fff;border-radius:10px;padding:8px 12px;
+    border:2px dashed var(--sage);display:flex;flex-wrap:wrap;gap:6px;
+    align-items:center;margin-bottom:10px;
+  }
+  .sentence-drop .word-chip{cursor:grab;background:var(--sage-l);border-color:var(--sage)}
+  .drop-hint{color:var(--ink-soft);font-size:.85rem;font-style:italic}
+  /* MCQ */
+  .mcq-opts{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  .mcq-btn{
+    background:var(--bg);border:2px solid var(--line);border-radius:10px;
+    padding:10px 14px;font-size:.95rem;font-family:'DM Sans',sans-serif;
+    cursor:pointer;text-align:left;transition:all .18s;color:var(--ink);
+  }
+  .mcq-btn:hover{border-color:var(--slate);background:var(--slate-l)}
+  .mcq-btn.correct{border-color:var(--ok);background:var(--ok-l);color:var(--ok)}
+  .mcq-btn.wrong{border-color:var(--ko);background:var(--ko-l);color:var(--ko)}
+  .mcq-btn:disabled{cursor:not-allowed}
+  /* FEEDBACK */
+  .fb{
+    padding:8px 14px;border-radius:8px;font-size:.9rem;margin-top:8px;
+    display:none;align-items:center;gap:8px;
+  }
+  .fb.show{display:flex}
+  .fb.ok{background:var(--ok-l);color:var(--ok)}
+  .fb.ko{background:var(--ko-l);color:var(--ko)}
+  /* BUTTONS */
+  .btn-primary{
+    background:var(--ink);color:#fff;border:none;border-radius:999px;
+    padding:11px 26px;font-size:.95rem;font-family:'DM Sans',sans-serif;
+    cursor:pointer;font-weight:500;transition:opacity .2s;margin-top:4px;
+  }
+  .btn-primary:hover{opacity:.85}
+  .btn-honey{
+    background:var(--honey);color:#fff;border:none;border-radius:999px;
+    padding:13px 30px;font-size:1rem;font-family:'DM Sans',sans-serif;
+    cursor:pointer;font-weight:600;transition:opacity .2s;margin-top:4px;
+  }
+  .btn-honey:hover{opacity:.9}
+  .btn-ghost{
+    background:none;border:1.5px solid var(--line);color:var(--ink-soft);
+    border-radius:999px;padding:10px 22px;font-size:.9rem;
+    font-family:'DM Sans',sans-serif;cursor:pointer;margin-top:4px;
+    transition:all .2s;
+  }
+  .btn-ghost:hover{border-color:var(--ink);color:var(--ink)}
+  .actions{display:flex;flex-wrap:wrap;gap:10px;margin-top:16px}
+  /* RESULT MODAL */
+  .result-box{
+    background:var(--honey-l);border:2px solid var(--honey);border-radius:var(--radius);
+    padding:20px 24px;text-align:center;margin-top:16px;display:none;
+  }
+  .result-box.show{display:block}
+  .result-emoji{font-size:2.5rem}
+  .result-score{font-family:'Playfair Display',serif;font-size:2rem;font-weight:900;
+    color:var(--terra)}
+  .result-msg{color:var(--ink-soft);font-size:.95rem;margin-top:4px}
+  /* LINKS */
+  .resources a{color:var(--sage-dark);padding:6px 0;display:block;font-size:.9rem}
+  /* LLIURAR */
+  .summary-box{
+    background:linear-gradient(180deg,#FFFCF5,#FFFFFF);
+    border:1px solid var(--honey);border-radius:var(--radius);
+    padding:16px 18px;margin-top:14px;
+  }
+  .summary-box h4{margin-bottom:10px;color:var(--honey);font-family:'Playfair Display',serif;}
+  .summary-box table{width:100%;border-collapse:collapse;font-size:.92rem;}
+  .summary-box td{padding:6px 8px;border-bottom:1px solid var(--line);vertical-align:top;}
+  .summary-box td:first-child{font-weight:600;width:55%;}
+  .summary-box td:last-child{text-align:right;color:var(--ink-soft);}
+  .delivery-steps{counter-reset:ds;list-style:none;padding:0;margin:14px 0 0;}
+  .delivery-steps li{
+    counter-increment:ds;padding:9px 8px 9px 44px;position:relative;
+    border-bottom:1px solid var(--line);font-size:.95rem;
+  }
+  .delivery-steps li:before{
+    content:counter(ds);position:absolute;left:8px;top:9px;
+    width:26px;height:26px;border-radius:50%;
+    background:var(--honey);color:#fff;
+    display:flex;align-items:center;justify-content:center;
+    font-weight:700;font-size:.85rem;
+  }
+  .toast{
+    position:fixed;left:50%;bottom:30px;
+    transform:translateX(-50%) translateY(80px);
+    background:var(--ink);color:#fff;padding:12px 20px;
+    border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.18);
+    opacity:0;transition:.3s;pointer-events:none;z-index:999;
+    font-family:'DM Sans',sans-serif;
+  }
+  .toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
+
+  /* no-select */
+  body { -webkit-user-select:none; -moz-user-select:none; -ms-user-select:none; user-select:none; }
+  input, textarea { -webkit-user-select:text; -moz-user-select:text; user-select:text; }
+
+  /* LOCK OVERLAY */
+  .lock-overlay {
+    position:absolute;inset:0;background:rgba(247,243,238,.92);
+    border-radius:var(--radius);display:flex;flex-direction:column;
+    align-items:center;justify-content:center;gap:10px;z-index:10;
+    backdrop-filter:blur(2px);
+  }
+  .lock-overlay .lock-icon{font-size:2.4rem}
+  .lock-overlay p{color:var(--ink);font-size:.95rem;text-align:center;max-width:280px;line-height:1.5}
+  .lock-overlay .lock-need{font-weight:700;color:var(--terra)}
+  .game-card{position:relative}
+  /* ORAL SECTION */
+  .oral-text-box{
+    background:var(--slate-l);border:1px solid var(--slate);border-radius:var(--radius);
+    padding:20px 24px;margin-bottom:20px;font-size:1rem;line-height:1.8;
+    font-family:'DM Sans',sans-serif;
+  }
+  .oral-text-box .speaker{font-size:.8rem;font-weight:700;color:var(--slate);
+    text-transform:uppercase;letter-spacing:.1em;margin-right:6px}
+
+  /* ACCORDION INSTRUCTIONS */
+  .accord-wrap{max-width:860px;margin:16px auto 0;padding:0 20px}
+  .accord-btn{
+    width:100%;background:var(--card);border:1.5px solid var(--honey);
+    color:var(--ink);border-radius:10px;padding:12px 18px;
+    font-family:'DM Sans',sans-serif;font-size:.92rem;font-weight:500;
+    cursor:pointer;text-align:left;display:flex;justify-content:space-between;
+    align-items:center;transition:background .2s;
+  }
+  .accord-btn:hover{background:var(--honey-l)}
+  .accord-arrow{transition:transform .3s;font-style:normal;font-size:1rem;color:var(--honey)}
+  .accord-body{
+    display:none;background:var(--card);
+    border:1.5px solid var(--honey);border-top:none;
+    border-radius:0 0 10px 10px;padding:18px 20px;
+  }
+  .accord-body.open{display:block}
+  .accord-lang{font-size:.72rem;letter-spacing:.12em;text-transform:uppercase;
+    background:var(--honey);color:#fff;padding:2px 7px;border-radius:4px;
+    margin-right:8px;font-weight:700}
+  /* RESPONSIVE */
+  @media(max-width:540px){.mcq-opts{grid-template-columns:1fr}}
+</style>
+</head>
+<body oncopy="return false" oncut="return false" onpaste="return false">
+<div class="hero">
+  <div class="hero-badge">A1 · Grammaire · 2n ESO</div>
+  <h1>Le Présent de<br><em>l'Indicatif</em></h1>
+  <p>Trois jeux interactifs et une compréhension orale pour maîtriser la conjugaison au présent</p>
+</div>
+
+
+<!-- ABANS DE COMENÇAR (nom + grup) -->
+<div class="id-block" id="identify">
+  <p class="warn">⚠️ Abans de començar: escriu el teu nom i el grup. Apareixeran al PDF que has de pujar a Classroom.</p>
+  <div class="id-fields">
+    <label>Nom i cognoms *<input type="text" id="studentName" placeholder="Ex.: Marta Garcia"></label>
+    <label>Grup / Classe *<input type="text" id="studentGroup" placeholder="Ex.: 2n ESO B"></label>
+  </div>
+</div>
+<!-- INSTRUCCIONS DESPLEGABLES -->
+<div class="accord-wrap">
+  <button class="accord-btn" onclick="toggleAccord(this)" aria-expanded="false">
+    <span>📋 <span class="accord-lang">Instructions</span> Comment utiliser cette activité ?</span>
+    <em class="accord-arrow">▾</em>
+  </button>
+  <div class="accord-body">
+    <p style="color:var(--ink);font-size:.93rem;line-height:1.7;margin-bottom:12px">
+      <span class="accord-lang">FR</span>
+      Lis d'abord la <strong>Théorie</strong>. Ensuite, fais les activités dans l'ordre : <strong>Jeu 1</strong>, <strong>Jeu 2</strong>, <strong>Jeu 3</strong> et <strong>Compréhension orale</strong>. Chaque activité se débloque si tu obtiens au moins <strong>60 %</strong> à la précédente. À la fin, va dans <strong>Lliurar</strong>, télécharge ton <strong>PDF</strong> et dépose-le sur <strong>Google Classroom</strong>.
+    </p>
+    <p style="color:var(--ink);font-size:.93rem;line-height:1.7;border-top:1px solid var(--line);padding-top:12px">
+      <span class="accord-lang">CA</span>
+      Primer llegeix la <strong>Théorie</strong>. Després, fes les activitats en ordre : <strong>Jeu 1</strong>, <strong>Jeu 2</strong>, <strong>Jeu 3</strong> i <strong>Compréhension orale</strong>. Cada activitat es desbloqueja si obtens almenys un <strong>60 %</strong> a l'anterior. Al final, ves a <strong>Lliurar</strong>, descarrega el teu <strong>PDF</strong> i puja'l a <strong>Google Classroom</strong>.
+    </p>
+  </div>
+</div>
+
+
+<nav class="tabs">
+  <button class="active" onclick="showPanel('theory',this)">📖 Théorie</button>
+  <button id="tab-jeu1" onclick="showPanel('jeu1',this)">🎯 Jeu 1 — Conjuguer</button>
+  <button id="tab-jeu2" onclick="showPanel('jeu2',this)">🧩 Jeu 2 — Reconstituer</button>
+  <button id="tab-jeu3" onclick="showPanel('jeu3',this)">⚡ Jeu 3 — Choix rapide</button>
+  <button id="tab-oral" onclick="showPanel('oral',this)">🎧 Compréhension orale</button>
+  <button class="cta" id="tab-lliurar" onclick="showPanel('lliurar',this)">📤 Lliurar</button>
+</nav>
+<main>
+<!-- ══ THÉORIE ══ -->
+<section class="panel active" id="theory">
+  <div class="sec-head">
+    <div class="sec-icon" style="background:var(--honey-l);color:var(--honey)">📖</div>
+    <h2>La formation du présent</h2>
+  </div>
+  <div class="theory-card">
+    <h3>Quand utilise-t-on le présent ?</h3>
+    <p style="margin-bottom:10px">On utilise le présent pour parler d'une <strong>action habituelle</strong>, d'un <strong>état actuel</strong> ou d'une <strong>vérité générale</strong>.</p>
+    <p style="color:var(--ink-soft);font-style:italic">Je mange une pomme. · Elle habite à Paris. · Il fait chaud en été.</p>
+  </div>
+  <div class="theory-card">
+    <h3>Verbes en <span class="pill pill-er">-ER</span> (parler, aimer, habiter…)</h3>
+    <table class="conj-table">
+      <tr><th>Pronom</th><th>Terminaison</th><th>Exemple</th></tr>
+      <tr><td>je</td><td class="form">-e</td><td class="example">je parl<strong>e</strong></td></tr>
+      <tr><td>tu</td><td class="form">-es</td><td class="example">tu parl<strong>es</strong></td></tr>
+      <tr><td>il / elle / on</td><td class="form">-e</td><td class="example">il parl<strong>e</strong></td></tr>
+      <tr><td>nous</td><td class="form">-ons</td><td class="example">nous parl<strong>ons</strong></td></tr>
+      <tr><td>vous</td><td class="form">-ez</td><td class="example">vous parl<strong>ez</strong></td></tr>
+      <tr><td>ils / elles</td><td class="form">-ent</td><td class="example">ils parl<strong>ent</strong></td></tr>
+    </table>
+  </div>
+  <div class="theory-card">
+    <h3>Verbes en <span class="pill pill-ir">-IR</span> (finir, choisir, grandir…)</h3>
+    <table class="conj-table">
+      <tr><th>Pronom</th><th>Terminaison</th><th>Exemple</th></tr>
+      <tr><td>je</td><td class="form">-is</td><td class="example">je fin<strong>is</strong></td></tr>
+      <tr><td>tu</td><td class="form">-is</td><td class="example">tu fin<strong>is</strong></td></tr>
+      <tr><td>il / elle / on</td><td class="form">-it</td><td class="example">il fin<strong>it</strong></td></tr>
+      <tr><td>nous</td><td class="form">-issons</td><td class="example">nous fin<strong>issons</strong></td></tr>
+      <tr><td>vous</td><td class="form">-issez</td><td class="example">vous fin<strong>issez</strong></td></tr>
+      <tr><td>ils / elles</td><td class="form">-issent</td><td class="example">ils fin<strong>issent</strong></td></tr>
+    </table>
+  </div>
+  <div class="theory-card">
+    <h3>Verbes irréguliers <span class="pill pill-irreg">à mémoriser !</span></h3>
+    <table class="conj-table">
+      <tr><th>Pronom</th><th>être</th><th>avoir</th><th>aller</th><th>faire</th></tr>
+      <tr><td>je / j'</td><td>suis</td><td>ai</td><td>vais</td><td>fais</td></tr>
+      <tr><td>tu</td><td>es</td><td>as</td><td>vas</td><td>fais</td></tr>
+      <tr><td>il / elle</td><td>est</td><td>a</td><td>va</td><td>fait</td></tr>
+      <tr><td>nous</td><td>sommes</td><td>avons</td><td>allons</td><td>faisons</td></tr>
+      <tr><td>vous</td><td>êtes</td><td>avez</td><td>allez</td><td>faites</td></tr>
+      <tr><td>ils / elles</td><td>sont</td><td>ont</td><td>vont</td><td>font</td></tr>
+    </table>
+  </div>
+  <div class="theory-card">
+    <h3>Plus d'irréguliers fréquents <span class="pill pill-irreg">à connaître</span></h3>
+    <table class="conj-table">
+      <tr><th>Pronom</th><th>prendre</th><th>venir</th><th>voir</th><th>dire</th></tr>
+      <tr><td>je</td><td>prends</td><td>viens</td><td>vois</td><td>dis</td></tr>
+      <tr><td>tu</td><td>prends</td><td>viens</td><td>vois</td><td>dis</td></tr>
+      <tr><td>il / elle</td><td>prend</td><td>vient</td><td>voit</td><td>dit</td></tr>
+      <tr><td>nous</td><td>prenons</td><td>venons</td><td>voyons</td><td>disons</td></tr>
+      <tr><td>vous</td><td>prenez</td><td>venez</td><td>voyez</td><td>dites</td></tr>
+      <tr><td>ils / elles</td><td>prennent</td><td>viennent</td><td>voient</td><td>disent</td></tr>
+    </table>
+    <table class="conj-table" style="margin-top:14px">
+      <tr><th>Pronom</th><th>pouvoir</th><th>vouloir</th><th>savoir</th><th>devoir</th></tr>
+      <tr><td>je</td><td>peux</td><td>veux</td><td>sais</td><td>dois</td></tr>
+      <tr><td>tu</td><td>peux</td><td>veux</td><td>sais</td><td>dois</td></tr>
+      <tr><td>il / elle</td><td>peut</td><td>veut</td><td>sait</td><td>doit</td></tr>
+      <tr><td>nous</td><td>pouvons</td><td>voulons</td><td>savons</td><td>devons</td></tr>
+      <tr><td>vous</td><td>pouvez</td><td>voulez</td><td>savez</td><td>devez</td></tr>
+      <tr><td>ils / elles</td><td>peuvent</td><td>veulent</td><td>savent</td><td>doivent</td></tr>
+    </table>
+    <table class="conj-table" style="margin-top:14px">
+      <tr><th>Pronom</th><th>lire</th><th>écrire</th><th>boire</th><th>mettre</th></tr>
+      <tr><td>je</td><td>lis</td><td>écris</td><td>bois</td><td>mets</td></tr>
+      <tr><td>tu</td><td>lis</td><td>écris</td><td>bois</td><td>mets</td></tr>
+      <tr><td>il / elle</td><td>lit</td><td>écrit</td><td>boit</td><td>met</td></tr>
+      <tr><td>nous</td><td>lisons</td><td>écrivons</td><td>buvons</td><td>mettons</td></tr>
+      <tr><td>vous</td><td>lisez</td><td>écrivez</td><td>buvez</td><td>mettez</td></tr>
+      <tr><td>ils / elles</td><td>lisent</td><td>écrivent</td><td>boivent</td><td>mettent</td></tr>
+    </table>
+    <table class="conj-table" style="margin-top:14px">
+      <tr><th>Pronom</th><th>partir</th><th>sortir</th><th>dormir</th><th>ouvrir</th></tr>
+      <tr><td>je</td><td>pars</td><td>sors</td><td>dors</td><td>ouvre</td></tr>
+      <tr><td>tu</td><td>pars</td><td>sors</td><td>dors</td><td>ouvres</td></tr>
+      <tr><td>il / elle</td><td>part</td><td>sort</td><td>dort</td><td>ouvre</td></tr>
+      <tr><td>nous</td><td>partons</td><td>sortons</td><td>dormons</td><td>ouvrons</td></tr>
+      <tr><td>vous</td><td>partez</td><td>sortez</td><td>dormez</td><td>ouvrez</td></tr>
+      <tr><td>ils / elles</td><td>partent</td><td>sortent</td><td>dorment</td><td>ouvrent</td></tr>
+    </table>
+    <p style="margin-top:12px;font-size:.88rem;color:var(--ink-soft)">💡 <strong>Truc:</strong> els verbs en -<em>tir</em> (partir, sortir, dormir, mentir, sentir) treuen la consonant a <em>je/tu/il</em>: je par<strong>s</strong>, je sor<strong>s</strong>, je dor<strong>s</strong>. <em>Ouvrir, offrir, couvrir, souffrir</em> es conjuguen com verbs en -ER (j'ouvre, tu ouvres…).</p>
+  </div>
+  <div class="theory-card" style="border-left:4px solid var(--terra)">
+    <h3>⚠️ Erreurs typiques</h3>
+    <p>❌ <span style="color:var(--ko)">Je parles</span> → ✅ <strong>Je parle</strong> (pas de -s avec je + verbe en -er)</p>
+    <p style="margin-top:8px">❌ <span style="color:var(--ko)">Nous parlent</span> → ✅ <strong>Nous parlons</strong></p>
+    <p style="margin-top:8px">❌ <span style="color:var(--ko)">Il a fatigué</span> → ✅ <strong>Il est fatigué</strong> (être ≠ avoir)</p>
+  </div>
+</section>
+<!-- ══ JEU 1 — CONJUGUER ══ -->
+<section class="panel" id="jeu1">
+  <div class="sec-head">
+    <div class="sec-icon" style="background:var(--sage-l);color:var(--sage)">🎯</div>
+    <h2>Jeu 1 — Conjugue le verbe !</h2>
+  </div>
+  <div class="game-card">
+    <div class="game-title">Complète la phrase</div>
+    <div class="game-subtitle">Écris la bonne forme du verbe entre parenthèses. Attention aux irréguliers !</div>
+    <div class="score-bar">
+      <span class="score-label">Score :</span>
+      <span class="score-val" id="j1-score">0 / 0</span>
+      <div class="progress-wrap"><div class="progress-fill" id="j1-prog" style="width:0%"></div></div>
+    </div>
+    <div id="j1-questions"></div>
+    <div class="actions">
+      <button class="btn-primary" onclick="checkJ1()">Vérifier mes réponses</button>
+      <button class="btn-ghost" onclick="resetJ1()">Recommencer</button>
+    </div>
+    <div class="result-box" id="j1-result">
+      <div class="result-emoji" id="j1-emoji">🎉</div>
+      <div class="result-score" id="j1-scoretext"></div>
+      <div class="result-msg" id="j1-msg"></div>
+    </div>
+  </div>
+</section>
+<!-- ══ JEU 2 — RECONSTITUER ══ -->
+<section class="panel" id="jeu2">
+  <div class="sec-head">
+    <div class="sec-icon" style="background:var(--slate-l);color:var(--slate)">🧩</div>
+    <h2>Jeu 2 — Reconstitue la phrase</h2>
+  </div>
+  <div class="game-card">
+    <div id="j2-lock-overlay" class="lock-overlay" style="display:none">
+      <div class="lock-icon">🔒</div>
+      <p>Primer cal superar el <span class="lock-need">Jeu 1</span> amb un <span class="lock-need">60% o més</span>.</p>
+    </div>
+    <div class="game-title">Remet les mots dans l'ordre</div>
+    <div class="game-subtitle">Clique sur les mots pour les ajouter dans le bon ordre. Clique sur un mot dans la phrase pour le retirer.</div>
+    <div class="score-bar">
+      <span class="score-label">Score :</span>
+      <span class="score-val" id="j2-score">0 / 0</span>
+      <div class="progress-wrap"><div class="progress-fill" id="j2-prog" style="width:0%"></div></div>
+    </div>
+    <div id="j2-container"></div>
+    <div class="actions">
+      <button class="btn-primary" onclick="nextJ2()">Vérifier →</button>
+      <button class="btn-ghost" onclick="clearJ2()">Effacer</button>
+    </div>
+    <div class="result-box" id="j2-result">
+      <div class="result-emoji" id="j2-emoji">🎉</div>
+      <div class="result-score" id="j2-scoretext"></div>
+      <div class="result-msg" id="j2-msg"></div>
+    </div>
+  </div>
+</section>
+<!-- ══ JEU 3 — CHOIX RAPIDE ══ -->
+<section class="panel" id="jeu3">
+  <div class="sec-head">
+    <div class="sec-icon" style="background:var(--terra-l);color:var(--terra)">⚡</div>
+    <h2>Jeu 3 — Choix rapide</h2>
+  </div>
+  <div class="game-card">
+    <div id="j3-lock-overlay" class="lock-overlay" style="display:none">
+      <div class="lock-icon">🔒</div>
+      <p>Primer cal superar el <span class="lock-need">Jeu 2</span> amb un <span class="lock-need">60% o més</span>.</p>
+    </div>
+    <div class="game-title">Choisis la bonne réponse</div>
+    <div class="game-subtitle">Une seule réponse est correcte. Réfléchis bien au sujet et au groupe du verbe !</div>
+    <div class="score-bar">
+      <span class="score-label">Score :</span>
+      <span class="score-val" id="j3-score">0 / 0</span>
+      <div class="progress-wrap"><div class="progress-fill" id="j3-prog" style="width:0%"></div></div>
+    </div>
+    <div id="j3-container"></div>
+    <div class="result-box" id="j3-result">
+      <div class="result-emoji" id="j3-emoji">🎉</div>
+      <div class="result-score" id="j3-scoretext"></div>
+      <div class="result-msg" id="j3-msg"></div>
+    </div>
+  </div>
+</section>
+
+<!-- ══ LLIURAR ══ -->
+<section class="panel" id="lliurar">
+  <div class="sec-head">
+    <div class="sec-icon" style="background:var(--honey-l);color:var(--honey)">📤</div>
+    <h2>Finalitzar i lliurar a Classroom</h2>
+  </div>
+  <div class="game-card">
+    <div class="game-title">El teu PDF de lliurament</div>
+    <div class="game-subtitle">Quan acabis els 3 jocs, comprova el resum, descarrega el PDF i puja'l a Google Classroom.</div>
+
+    <div class="summary-box">
+      <h4>Resum del teu treball</h4>
+      <table id="summaryTable"></table>
+    </div>
+
+    <div class="actions">
+      <button class="btn-ghost" id="refreshSummary">↻ Actualitzar resum</button>
+      <button class="btn-honey" id="dlPdf">📄 Descarregar el meu PDF</button>
+      <button class="btn-ghost" onclick="clearProgress()" style="color:var(--ko);border-color:var(--ko)">🗑 Esborrar progrés</button>
+    </div>
+  </div>
+  <div class="theory-card" style="border-left:4px solid var(--honey)">
+    <h3>Com lliurar-ho a Google Classroom</h3>
+    <ol class="delivery-steps">
+      <li>Fes clic a <em>📄 Descarregar el meu PDF</em>. Es desarà al teu dispositiu (carpeta <em>Descàrregues</em>).</li>
+      <li>Obre Google Classroom i ves a la tasca «Le Présent de l'Indicatif».</li>
+      <li>Fes clic a <em>Afegeix o crea → Fitxer</em> i tria el PDF descarregat.</li>
+      <li>Fes clic a <em>Lliura</em>. Llest! 🎉</li>
+    </ol>
+  </div>
+</section>
+
+<!-- ══ COMPRÉHENSION ORALE ══ -->
+<section class="panel" id="oral">
+  <div class="sec-head">
+    <div class="sec-icon" style="background:var(--slate-l);color:var(--slate)">🎧</div>
+    <h2>Compréhension orale</h2>
+  </div>
+  <div class="theory-card" style="border-left:4px solid var(--slate);margin-bottom:20px">
+    <h3 style="color:var(--slate)">🎧 Écoute le texte</h3>
+    <p style="font-size:.9rem;color:var(--ink-soft);margin-top:4px">Écoute attentivement le texte. Tu peux l'écouter deux fois. Ensuite, réponds aux questions <strong>sans regarder le texte</strong>.</p>
+  </div>
+
+  <div style="margin-bottom:20px">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+      <span style="font-weight:700;color:var(--slate);font-size:1rem">Ma journée habituelle</span>
+      <div style="display:flex;gap:8px">
+        <button class="btn-ghost" id="tts-btn" onclick="readOralText()" style="padding:6px 16px;font-size:.85rem">🔊 Escolta el text</button>
+        <button class="btn-ghost" id="toggle-text-btn" onclick="toggleOralText()" style="padding:6px 16px;font-size:.85rem">👁 Mostra el text</button>
+      </div>
+    </div>
+  <div class="oral-text-box" id="oral-text-visible" style="display:none">
+    <p>
+      <span class="speaker">Narrateur :</span>
+      Je m'appelle Lucas. J'ai treize ans et j'habite à Lyon avec ma famille.
+      Le matin, je me lève à sept heures. Je mange des céréales et je bois un jus d'orange.
+      Puis je prends le bus avec mon ami Théo. Nous arrivons au collège à huit heures et quart.
+    </p>
+    <p style="margin-top:10px">
+      <span class="speaker">Narrateur :</span>
+      À l'école, j'ai des cours de maths, de français et d'anglais. Mon professeur de maths s'appelle Monsieur Dupont. Il explique très bien.
+      Le midi, je mange à la cantine avec mes amis. Nous mangeons de la salade, du poulet et des fruits.
+    </p>
+    <p style="margin-top:10px">
+      <span class="speaker">Narrateur :</span>
+      L'après-midi, je fais du sport. J'aime beaucoup le football. Mon équipe s'entraîne le mardi et le jeudi.
+      Le soir, je fais mes devoirs et je lis un livre. Ma sœur, elle, regarde la télévision.
+      À vingt et une heures, toute la famille dîne ensemble. Nous parlons de notre journée.
+      Je dors à vingt-deux heures. C'est une journée bien chargée !
+    </p>
+  </div>
+  </div>
+
+  <div class="game-card" id="oral-questions-card">
+    <div id="oral-lock-overlay" class="lock-overlay" style="display:none">
+      <div class="lock-icon">🔒</div>
+      <p>Primer cal superar el <span class="lock-need">Jeu 3</span> amb un <span class="lock-need">60% o més</span>.</p>
+    </div>
+    <div class="game-title">Réponds aux questions</div>
+    <div class="game-subtitle">Choisis la bonne réponse d'après le texte. Tu ne peux plus regarder le texte !</div>
+    <div class="score-bar">
+      <span class="score-label">Score :</span>
+      <span class="score-val" id="jo-score">0 / 0</span>
+      <div class="progress-wrap"><div class="progress-fill" id="jo-prog" style="width:0%"></div></div>
+    </div>
+    <div id="jo-container"></div>
+    <div class="result-box" id="jo-result">
+      <div class="result-emoji" id="jo-emoji">🎉</div>
+      <div class="result-score" id="jo-scoretext"></div>
+      <div class="result-msg" id="jo-msg"></div>
+    </div>
+  </div>
+</section>
+
+
+</main>
+
+<div class="toast" id="toast">PDF generat ✅</div>
+
+<script>
+// tracker for PDF
+window.__results = { j1:null, j2:null, j3:null };
+// ─── NAV ───────────────────────────────────────────
+let theoryVisited = false;
+function showPanel(id, btn) {
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('nav button').forEach(b => b.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  btn.classList.add('active');
+  window.scrollTo({top:0, behavior:'smooth'});
+  if(id==='theory'){ theoryVisited=true; updateLocks(); saveProgress(); }
+  if(id==='lliurar') buildSummary();
+}
+// ─── JEU 1 — FILL-IN ───────────────────────────────
+const j1Data = [
+  {before:"Je ", verb:"parler", form:"parle", after:" français en classe."},
+  {before:"Nous ", verb:"manger", form:"mangeons", after:" du pain le matin."},
+  {before:"Tu ", verb:"regarder", form:"regardes", after:" la télé après l'école."},
+  {before:"Elles ", verb:"écouter", form:"écoutent", after:" de la musique pop."},
+  {before:"Elle ", verb:"choisir", form:"choisit", after:" toujours le chocolat."},
+  {before:"Ils ", verb:"finir", form:"finissent", after:" leurs devoirs à 18h."},
+  {before:"Tu ", verb:"aller", form:"vas", after:" au cinéma ce soir ?"},
+  {before:"Nous ", verb:"faire", form:"faisons", after:" du sport le samedi."},
+  {before:"Léa ", verb:"être", form:"est", after:" très gentille."},
+  {before:"Ils ", verb:"prendre", form:"prennent", after:" le bus pour aller au collège."},
+];
+function buildJ1() {
+  const c = document.getElementById('j1-questions');
+  c.innerHTML = '';
+  j1Data.forEach((q, i) => {
+    c.innerHTML += `
+      <div class="q-block">
+        <div class="q-text">${q.before}<input class="fill-input" id="j1-${i}" placeholder="${q.verb}">${q.after}</div>
+        <div class="fb" id="j1-fb-${i}"></div>
+      </div>`;
+  });
+  document.getElementById('j1-result').classList.remove('show');
+  updateJ1Score(0, 0);
+}
+function checkJ1() {
+  let ok = 0;
+  j1Data.forEach((q, i) => {
+    const inp = document.getElementById(`j1-${i}`);
+    const fb = document.getElementById(`j1-fb-${i}`);
+    const val = inp.value.trim().toLowerCase();
+    inp.classList.remove('correct','wrong');
+    fb.classList.remove('show','ok','ko');
+    if (val === q.form) {
+      ok++;
+      inp.classList.add('correct');
+      fb.className = 'fb show ok';
+      fb.textContent = '✓ Correct !';
+    } else {
+      inp.classList.add('wrong');
+      fb.className = 'fb show ko';
+      fb.textContent = `✗ La bonne réponse : ${q.form}`;
+    }
+  });
+  updateJ1Score(ok, j1Data.length);
+  window.__results.j1 = { score: ok, total: j1Data.length };
+  recordAttempt('j1', ok, j1Data.length);
+  updateLocks();
+  showResult('j1', ok, j1Data.length);
+}
+function updateJ1Score(ok, total) {
+  document.getElementById('j1-score').textContent = `${ok} / ${total}`;
+  document.getElementById('j1-prog').style.width = total ? `${ok/total*100}%` : '0%';
+}
+function resetJ1() { buildJ1(); window.__results.j1 = null; }
+// ─── JEU 2 — REORDER ───────────────────────────────
+const j2Data = [
+  {words:["mange","Elle","une","pomme","rouge"], answer:"Elle mange une pomme rouge"},
+  {words:["sommes","Nous","en","classe","de","français"], answer:"Nous sommes en classe de français"},
+  {words:["va","au","Paul","parc","le","dimanche"], answer:"Paul va au parc le dimanche"},
+  {words:["font","du","sport","Ils","après","l'école"], answer:"Ils font du sport après l'école"},
+  {words:["choisit","Elle","toujours","la","pizza"], answer:"Elle choisit toujours la pizza"},
+  {words:["fais","la","Je","cuisine","le","samedi"], answer:"Je fais la cuisine le samedi"},
+  {words:["prennent","Ils","le","train","à","8h"], answer:"Ils prennent le train à 8h"},
+  {words:["dort","Le","chat","sur","le","canapé"], answer:"Le chat dort sur le canapé"},
+];
+let j2Idx = 0, j2Ok = 0, j2Pool = [], j2Chosen = [];
+function buildJ2() {
+  if (j2Idx >= j2Data.length) { endJ2(); return; }
+  const q = j2Data[j2Idx];
+  j2Pool = shuffle([...q.words]);
+  j2Chosen = [];
+  renderJ2();
+}
+function renderJ2() {
+  const c = document.getElementById('j2-container');
+  c.innerHTML = `
+    <div class="q-text" style="margin-bottom:12px">
+      Phrase ${j2Idx+1} / ${j2Data.length}
+    </div>
+    <div class="words-pool" id="j2-pool">
+      ${j2Pool.map((w,i)=>`<div class="word-chip" onclick="j2Add(${i})" id="j2-w-${i}">${w}</div>`).join('')}
+    </div>
+    <div class="sentence-drop" id="j2-drop">
+      <span class="drop-hint" id="j2-hint">Clique les mots ici…</span>
+    </div>
+    <div class="fb" id="j2-fb"></div>`;
+}
+function j2Add(idx) {
+  const chip = document.getElementById(`j2-w-${idx}`);
+  if (chip.style.visibility === 'hidden') return;
+  chip.style.visibility = 'hidden';
+  j2Chosen.push({idx, word: j2Pool[idx]});
+  renderDropzone();
+}
+function renderDropzone() {
+  const drop = document.getElementById('j2-drop');
+  if (j2Chosen.length) {
+    drop.innerHTML = j2Chosen.map((c,i) =>
+      `<div class="word-chip" style="background:var(--sage-l);border-color:var(--sage)" onclick="j2Remove(${i})">${c.word}</div>`
+    ).join('');
+  } else {
+    drop.innerHTML = '<span class="drop-hint">Clique les mots ici…</span>';
+  }
+}
+function j2Remove(i) {
+  const removed = j2Chosen.splice(i,1)[0];
+  const chip = document.getElementById(`j2-w-${removed.idx}`);
+  if (chip) chip.style.visibility = 'visible';
+  renderDropzone();
+}
+function clearJ2() { j2Chosen=[]; j2Pool=shuffle([...j2Data[j2Idx].words]); buildJ2(); }
+function nextJ2() {
+  const fb = document.getElementById('j2-fb');
+  if (!j2Chosen.length) { fb.className='fb show ko'; fb.textContent='⚠️ Ajoute des mots !'; return; }
+  const built = j2Chosen.map(c=>c.word).join(' ');
+  const answer = j2Data[j2Idx].answer;
+  fb.classList.remove('show','ok','ko');
+  if (built === answer) {
+    j2Ok++;
+    fb.className='fb show ok'; fb.textContent='✓ Parfait !';
+  } else {
+    fb.className='fb show ko'; fb.textContent=`✗ Bonne réponse : ${answer}`;
+  }
+  updateJ2Score();
+  setTimeout(()=>{ j2Idx++; buildJ2(); },1500);
+}
+function endJ2() {
+  document.getElementById('j2-container').innerHTML = '';
+  window.__results.j2 = { score: j2Ok, total: j2Data.length };
+  recordAttempt('j2', j2Ok, j2Data.length);
+  updateLocks();
+  showResult('j2', j2Ok, j2Data.length);
+}
+function updateJ2Score() {
+  document.getElementById('j2-score').textContent = `${j2Ok} / ${j2Data.length}`;
+  document.getElementById('j2-prog').style.width = `${j2Ok/j2Data.length*100}%`;
+}
+function resetJ2() { j2Idx=0; j2Ok=0; buildJ2(); document.getElementById('j2-result').classList.remove('show'); updateJ2Score(); window.__results.j2=null; }
+// ─── JEU 3 — MCQ ───────────────────────────────────
+const j3Data = [
+  {q:"Qu'est-ce qu'elle ___ ? (faire)", opts:["fais","fait","font","faites"], ans:1},
+  {q:"Nous ___ à l'école le lundi. (aller)", opts:["allons","allez","vont","vas"], ans:0},
+  {q:"Tu ___ beaucoup de livres ? (avoir)", opts:["ai","avez","as","a"], ans:2},
+  {q:"Les enfants ___ leur repas. (finir)", opts:["finit","finissent","finisons","finissez"], ans:1},
+  {q:"Je ___ professeur de sport. (être)", opts:["suis","es","est","sommes"], ans:0},
+  {q:"Il ___ du café chaque matin. (boire)", opts:["boire","bois","boit","boivent"], ans:2},
+  {q:"Elles ___ très intelligentes. (être)", opts:["sont","est","sommes","suis"], ans:0},
+  {q:"Tu ___ toujours en retard ! (être)", opts:["suis","est","es","êtes"], ans:2},
+  {q:"Marie ___ un livre fantastique. (lire)", opts:["lis","lisons","lit","lisent"], ans:2},
+  {q:"Tu ___ le bus pour aller au lycée ? (prendre)", opts:["prends","prend","prennent","prenons"], ans:0},
+];
+let j3Idx=0, j3Ok=0;
+function buildJ3() {
+  if (j3Idx >= j3Data.length) { endJ3(); return; }
+  const q = j3Data[j3Idx];
+  const c = document.getElementById('j3-container');
+  c.innerHTML = `
+    <div class="q-text" style="margin-bottom:14px">
+      Question ${j3Idx+1} / ${j3Data.length}<br>
+      <strong style="font-size:1.05rem">${q.q}</strong>
+    </div>
+    <div class="mcq-opts">
+      ${q.opts.map((o,i)=>`<button class="mcq-btn" onclick="answerJ3(${i})">${o}</button>`).join('')}
+    </div>
+    <div class="fb" id="j3-fb"></div>`;
+}
+function answerJ3(chosen) {
+  const q = j3Data[j3Idx];
+  const btns = document.querySelectorAll('.mcq-btn');
+  btns.forEach(b=>b.disabled=true);
+  const fb = document.getElementById('j3-fb');
+  if (chosen === q.ans) {
+    j3Ok++;
+    btns[chosen].classList.add('correct');
+    fb.className='fb show ok'; fb.textContent='✓ Bravo !';
+  } else {
+    btns[chosen].classList.add('wrong');
+    btns[q.ans].classList.add('correct');
+    fb.className='fb show ko'; fb.textContent=`✗ La bonne réponse : ${q.opts[q.ans]}`;
+  }
+  updateJ3Score();
+  setTimeout(()=>{ j3Idx++; buildJ3(); },1400);
+}
+function endJ3() {
+  document.getElementById('j3-container').innerHTML = '';
+  window.__results.j3 = { score: j3Ok, total: j3Data.length };
+  recordAttempt('j3', j3Ok, j3Data.length);
+  updateLocks();
+  showResult('j3', j3Ok, j3Data.length);
+}
+function updateJ3Score() {
+  document.getElementById('j3-score').textContent = `${j3Ok} / ${j3Data.length}`;
+  document.getElementById('j3-prog').style.width = `${j3Ok/j3Data.length*100}%`;
+}
+function resetJ3() { j3Idx=0; j3Ok=0; buildJ3(); document.getElementById('j3-result').classList.remove('show'); updateJ3Score(); window.__results.j3=null; }
+// ─── SHARED ────────────────────────────────────────
+function showResult(prefix, ok, total) {
+  const pct = total ? ok/total : 0;
+  const box = document.getElementById(`${prefix}-result`);
+  document.getElementById(`${prefix}-emoji`).textContent = pct>=.8?'🏆':pct>=.5?'👍':'💪';
+  document.getElementById(`${prefix}-scoretext`).textContent = `${ok} / ${total}`;
+  const msgs = {
+    high:['Excellent travail !','Très bien !','Tu maîtrises le présent !'],
+    mid:['Pas mal ! Continue !','Encore un effort !','Tu progresses !'],
+    low:['Relis la théorie et réessaie !','Ne lâche pas !','Entraîne-toi encore !'],
+  };
+  const cat = pct>=.8?'high':pct>=.5?'mid':'low';
+  document.getElementById(`${prefix}-msg`).textContent = msgs[cat][Math.floor(Math.random()*3)];
+  box.classList.add('show');
+}
+function shuffle(arr) {
+  for (let i=arr.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[arr[i],arr[j]]=[arr[j],arr[i]];}
+  return arr;
+}
+// ─── SUMMARY + PDF ─────────────────────────────────
+function buildSummary(){
+  const name = (document.getElementById('studentName').value||'').trim() || '—';
+  const grp  = (document.getElementById('studentGroup').value||'').trim() || '—';
+  const R = window.__results || {};
+  const rows = [
+    ['Nom i cognoms', escapeHtml(name)],
+    ['Grup / Classe', escapeHtml(grp)],
+    ['Data', new Date().toLocaleDateString('ca-ES')],
+    ['Jeu 1 · Conjuguer', R.j1 ? `${R.j1.score} / ${R.j1.total}` : 'pendent'],
+    ['Jeu 2 · Reconstituer', R.j2 ? `${R.j2.score} / ${R.j2.total}` : 'pendent'],
+    ['Jeu 3 · Choix rapide', R.j3 ? `${R.j3.score} / ${R.j3.total}` : 'pendent'],
+    ['Compréhension orale', R.oral ? `${R.oral.score} / ${R.oral.total}` : 'pendent'],
+  ];
+  document.getElementById('summaryTable').innerHTML =
+    rows.map(r => `<tr><td>${r[0]}</td><td>${r[1]}</td></tr>`).join('');
+  return { name, grp, rows };
+}
+function escapeHtml(s){
+  return (s+'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+function toast(msg){
+  const t=document.getElementById('toast');
+  t.textContent=msg;t.classList.add('show');
+  clearTimeout(t._tid);
+  t._tid=setTimeout(()=>t.classList.remove('show'),2400);
+}
+document.getElementById('refreshSummary').onclick=()=>{buildSummary();toast('Resum actualitzat ✅');};
+['studentName','studentGroup'].forEach(id=>{
+  document.getElementById(id).addEventListener('input',buildSummary);
+});
+
+document.getElementById('dlPdf').onclick = ()=>{
+  const s = buildSummary();
+  if(s.name==='—' || s.grp==='—'){
+    alert('Cal omplir el Nom i el Grup abans de descarregar el PDF.');
+    document.getElementById('studentName').focus();
+    document.getElementById('identify').scrollIntoView({behavior:'smooth'});
+    return;
+  }
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({unit:'mm', format:'a4'});
+  const W = doc.internal.pageSize.getWidth();
+  const H = doc.internal.pageSize.getHeight();
+  let y = 0;
+
+  // header
+  doc.setFillColor(44,42,38); doc.rect(0,0,W,32,'F');
+  doc.setTextColor(247,243,238); doc.setFont('helvetica','bold'); doc.setFontSize(17);
+  doc.text("Le Présent de l'Indicatif", 14, 14);
+  doc.setFont('helvetica','italic'); doc.setFontSize(10);
+  doc.setTextColor(201,168,76);
+  doc.text("Tasca per a Google Classroom · FLE A1 · 2n ESO", 14, 21);
+  doc.setFont('helvetica','normal'); doc.setFontSize(9);
+  doc.setTextColor(220);
+  doc.text("https://presentindicatif.netlify.app/", 14, 27);
+
+  y = 42;
+  doc.setTextColor(44,42,38); doc.setFont('helvetica','bold'); doc.setFontSize(11);
+  doc.text(`Nom: ${s.name}`, 14, y);
+  doc.text(`Grup: ${s.grp}`, W/2, y);
+  y += 6;
+  doc.text(`Data: ${new Date().toLocaleDateString('ca-ES')}`, 14, y);
+  y += 9;
+  doc.setDrawColor(201,168,76); doc.setLineWidth(.4); doc.line(14, y, W-14, y); y += 7;
+
+  // resum
+  doc.setFont('helvetica','bold'); doc.setFontSize(12); doc.setTextColor(176,113,74);
+  doc.text("Resum del treball", 14, y); y += 7;
+  doc.setFont('helvetica','normal'); doc.setFontSize(10); doc.setTextColor(0);
+  s.rows.slice(3).forEach(r => {
+    if(y>275){ doc.addPage(); y=20; }
+    doc.setFont('helvetica','bold'); doc.text("• "+r[0], 14, y);
+    doc.setFont('helvetica','normal'); doc.text((r[1]+'').replace(/&[^;]+;/g,'&'), W-14, y, {align:'right'});
+    y += 6;
+  });
+  // historial d'intents
+  y += 4;
+  doc.setFont('helvetica','bold'); doc.setFontSize(11); doc.setTextColor(176,113,74);
+  doc.text("Historial d'intents", 14, y); y += 6;
+  const A2 = window.__attempts || {};
+  const gameLabels = {j1:'Jeu 1 · Conjuguer', j2:'Jeu 2 · Reconstituer', j3:'Jeu 3 · Choix rapide', oral:'Compréhension orale'};
+  Object.keys(gameLabels).forEach(g => {
+    if(y>270){doc.addPage();y=20;}
+    doc.setFont('helvetica','bold'); doc.setFontSize(9); doc.setTextColor(0);
+    doc.text(gameLabels[g]+':', 14, y); y += 5;
+    doc.setFont('helvetica','normal');
+    if(A2[g] && A2[g].length){
+      A2[g].forEach((a,i) => {
+        if(y>270){doc.addPage();y=20;}
+        doc.text(`  Intent #${i+1}: ${a.score}/${a.total} (${a.pct}%) · ${a.at}`, 14, y); y += 4.5;
+      });
+    } else {
+      doc.text('  Sense intents registrats', 14, y); y += 4.5;
+    }
+    y += 1;
+  });
+
+  y += 6;
+  doc.setDrawColor(201,168,76); doc.line(14, y, W-14, y); y += 7;
+
+  // JEU 1 detall
+  doc.setFont('helvetica','bold'); doc.setFontSize(12); doc.setTextColor(176,113,74);
+  doc.text("Jeu 1 · Conjuguer (respostes)", 14, y); y += 6;
+  doc.setFont('helvetica','normal'); doc.setFontSize(9); doc.setTextColor(0);
+  j1Data.forEach((q,i)=>{
+    const userInp = document.getElementById('j1-'+i);
+    const userVal = userInp ? (userInp.value || '(sense resposta)') : '(sense resposta)';
+    const ok = userVal.trim().toLowerCase() === q.form;
+    if(y>270){doc.addPage();y=20;}
+    const sentence = `${q.before}_____${q.after}`;
+    const lines = doc.splitTextToSize(`${i+1}. ${sentence} (${q.verb})`, W-28);
+    doc.setFont('helvetica','bold'); doc.text(lines, 14, y); y += lines.length*4.5;
+    doc.setFont('helvetica','normal');
+    doc.text(`   Tu: ${userVal}  ${ok?'OK':'X'}`, 14, y); y += 5;
+    if(!ok){ doc.text(`   Correcta: ${q.form}`, 14, y); y += 5; }
+    y += 1;
+  });
+
+  // JEU 3 detall
+  if(y>240){ doc.addPage(); y=20; }
+  y += 4;
+  doc.setDrawColor(201,168,76); doc.line(14, y, W-14, y); y += 7;
+  doc.setFont('helvetica','bold'); doc.setFontSize(12); doc.setTextColor(176,113,74);
+  doc.text("Jeu 3 · Choix rapide (solucionari)", 14, y); y += 6;
+  doc.setFont('helvetica','normal'); doc.setFontSize(9); doc.setTextColor(0);
+  j3Data.forEach((q,i)=>{
+    if(y>270){doc.addPage();y=20;}
+    const lines = doc.splitTextToSize(`${i+1}. ${q.q}`, W-28);
+    doc.setFont('helvetica','bold'); doc.text(lines, 14, y); y += lines.length*4.5;
+    doc.setFont('helvetica','normal');
+    doc.text(`   Resposta correcta: ${q.opts[q.ans]}`, 14, y); y += 5.5;
+  });
+
+  // ORAL detall
+  if(y>240){ doc.addPage(); y=20; }
+  y += 4;
+  doc.setDrawColor(201,168,76); doc.line(14, y, W-14, y); y += 7;
+  doc.setFont('helvetica','bold'); doc.setFontSize(12); doc.setTextColor(176,113,74);
+  doc.text("Compréhension orale (respostes)", 14, y); y += 6;
+  doc.setFont('helvetica','normal'); doc.setFontSize(9); doc.setTextColor(0);
+  joData.forEach((q,i)=>{
+    if(y>270){doc.addPage();y=20;}
+    const lines = doc.splitTextToSize(`${i+1}. ${q.q}`, W-28);
+    doc.setFont('helvetica','bold'); doc.text(lines, 14, y); y += lines.length*4.5;
+    doc.setFont('helvetica','normal');
+    const correctAns = q.opts[q.ans];
+    // check if user answered — we stored per-question results in joAnswers
+    const userAns = window.__joAnswers ? window.__joAnswers[i] : null;
+    if(userAns !== null && userAns !== undefined){
+      const isOk = userAns === q.ans;
+      doc.text(`   Tu: ${q.opts[userAns]}  ${isOk?'OK':'X'}`, 14, y); y += 5;
+      if(!isOk){ doc.text(`   Correcta: ${correctAns}`, 14, y); y += 5; }
+    } else {
+      doc.text(`   Correcta: ${correctAns}`, 14, y); y += 5;
+    }
+    y += 1;
+  });
+
+    // footer
+  const pages = doc.internal.getNumberOfPages();
+  for(let p=1;p<=pages;p++){
+    doc.setPage(p);
+    doc.setFont('helvetica','italic'); doc.setFontSize(8); doc.setTextColor(110);
+    doc.text(`${s.name} · ${s.grp} · Pàgina ${p}/${pages}`, W/2, H-8, {align:'center'});
+  }
+
+  const fname = `Present-Indicatif_${s.name.replace(/\s+/g,'_')}_${s.grp.replace(/\s+/g,'_')}.pdf`;
+  doc.save(fname);
+  toast('PDF generat ✅');
+};
+
+// INIT
+buildJ1();
+buildJ2();
+buildJ3();
+buildSummary();
+updateLocks();
+loadProgress();
+
+// ─── NO COPY-PASTE ─────────────────────────────────
+document.addEventListener('copy',  e => e.preventDefault());
+document.addEventListener('cut',   e => e.preventDefault());
+document.addEventListener('paste', e => {
+  // allow paste only in fill-inputs
+  if(!e.target.classList.contains('fill-input')) e.preventDefault();
+});
+document.addEventListener('contextmenu', e => e.preventDefault());
+document.addEventListener('keydown', e => {
+  if ((e.ctrlKey||e.metaKey) && ['c','x','a','u','s','p'].includes(e.key.toLowerCase())) {
+    if (!e.target.classList.contains('fill-input')) e.preventDefault();
+  }
+  if (e.key==='F12' || (e.ctrlKey&&e.shiftKey&&['i','j','c'].includes(e.key.toLowerCase()))) e.preventDefault();
+});
+
+// ─── LOCK SYSTEM ───────────────────────────────────
+const PASS = 0.6;
+function passedJ1(){ const r=window.__results.j1; return r && r.score/r.total>=PASS; }
+function passedJ2(){ const r=window.__results.j2; return r && r.score/r.total>=PASS; }
+function passedJ3(){ const r=window.__results.j3; return r && r.score/r.total>=PASS; }
+function passedOral(){ const r=window.__results.oral; return r && r.score/r.total>=PASS; }
+
+function updateLocks(){
+  setLock('j1-lock-overlay', !theoryVisited);
+  setLock('j2-lock-overlay', !passedJ1());
+  setLock('j3-lock-overlay', !passedJ2());
+  setLock('oral-lock-overlay', !passedJ3());
+  styleLockedTab('tab-jeu1', !theoryVisited);
+  styleLockedTab('tab-jeu2', !passedJ1());
+  styleLockedTab('tab-jeu3', !passedJ2());
+  styleLockedTab('tab-oral', !passedJ3());
+  styleLockedTab('tab-lliurar', !passedOral());
+}
+function setLock(id, locked){
+  const el = document.getElementById(id);
+  if(!el) return;
+  el.style.display = locked ? 'flex' : 'none';
+  const card = el.parentElement;
+  if(card){
+    card.style.pointerEvents = locked ? 'none' : '';
+    card.style.userSelect = locked ? 'none' : '';
+    // re-enable the overlay itself so it's visible/clickable
+    el.style.pointerEvents = 'auto';
+  }
+}
+function styleLockedTab(tabId, locked){
+  const t = document.getElementById(tabId);
+  if(!t) return;
+  t.style.opacity = locked ? '0.4' : '1';
+  t.style.cursor = locked ? 'not-allowed' : '';
+  t.style.pointerEvents = locked ? 'none' : '';
+  t.title = locked ? 'Cal superar el joc anterior amb ≥60%' : '';
+  // show/hide lock icon in tab
+  const hasIcon = t.dataset.origText;
+  if(!hasIcon) t.dataset.origText = t.textContent;
+  t.textContent = locked ? '🔒 ' + t.dataset.origText : t.dataset.origText;
+}
+
+// ─── ORAL MCQ ──────────────────────────────────────
+const joData = [
+  {q:"Comment s'appelle le personnage principal du texte ?",
+   opts:["Marc","Lucas","Théo","Paul"], ans:1},
+  {q:"Quel âge a Lucas ?",
+   opts:["onze ans","douze ans","treize ans","quatorze ans"], ans:2},
+  {q:"À quelle heure Lucas se lève-t-il le matin ?",
+   opts:["à six heures","à sept heures","à huit heures","à neuf heures"], ans:1},
+  {q:"Comment Lucas va-t-il au collège ?",
+   opts:["en voiture","à vélo","à pied","en bus"], ans:3},
+  {q:"Quel sport Lucas aime-t-il ?",
+   opts:["le basket","le tennis","la natation","le football"], ans:3},
+  {q:"À quelle heure Lucas dort-il ?",
+   opts:["à vingt heures","à vingt et une heures","à vingt-deux heures","à vingt-trois heures"], ans:2},
+];
+let joIdx=0, joOk=0, joStarted=false;
+
+function buildJO(){
+  if(joIdx>=joData.length){ endJO(); return; }
+  // hide text once started
+  if(!joStarted){ joStarted=true; hideOralText(); }
+  const q=joData[joIdx];
+  const c=document.getElementById('jo-container');
+  c.innerHTML=`
+    <div class="q-text" style="margin-bottom:14px">
+      Question ${joIdx+1} / ${joData.length}<br>
+      <strong style="font-size:1.05rem">${q.q}</strong>
+    </div>
+    <div class="mcq-opts">
+      ${q.opts.map((o,i)=>`<button class="mcq-btn" onclick="answerJO(${i})">${o}</button>`).join('')}
+    </div>
+    <div class="fb" id="jo-fb"></div>`;
+}
+function hideOralText(){
+  const t=document.getElementById('oral-text-visible');
+  if(t) t.style.display='none';
+  const btn=document.getElementById('toggle-text-btn');
+  if(btn){ btn.textContent='👁 Mostra el text'; }
+}
+function toggleOralText(){
+  const t=document.getElementById('oral-text-visible');
+  const btn=document.getElementById('toggle-text-btn');
+  if(!t||!btn) return;
+  if(t.style.display==='none'||t.style.display===''){
+    t.style.display='block';
+    btn.textContent='🙈 Amaga el text';
+  } else {
+    t.style.display='none';
+    btn.textContent='👁 Mostra el text';
+  }
+}
+function answerJO(chosen){
+  const q=joData[joIdx];
+  if(!window.__joAnswers) window.__joAnswers={};
+  window.__joAnswers[joIdx]=chosen;
+  const btns=document.querySelectorAll('#jo-container .mcq-btn');
+  btns.forEach(b=>b.disabled=true);
+  const fb=document.getElementById('jo-fb');
+  if(chosen===q.ans){
+    joOk++;
+    btns[chosen].classList.add('correct');
+    fb.className='fb show ok'; fb.textContent='✓ Bravo !';
+  } else {
+    btns[chosen].classList.add('wrong');
+    btns[q.ans].classList.add('correct');
+    fb.className='fb show ko'; fb.textContent=`✗ La bonne réponse : ${q.opts[q.ans]}`;
+  }
+  updateJOScore();
+  setTimeout(()=>{ joIdx++; buildJO(); },1400);
+}
+function endJO(){
+  document.getElementById('jo-container').innerHTML='';
+  window.__results.oral={score:joOk,total:joData.length};
+  recordAttempt('oral',joOk,joData.length);
+  updateLocks();
+  showResult('jo',joOk,joData.length);
+  updateLocks();
+}
+function updateJOScore(){
+  document.getElementById('jo-score').textContent=`${joOk} / ${joData.length}`;
+  document.getElementById('jo-prog').style.width=`${joOk/joData.length*100}%`;
+}
+
+// ─── PATCH showPanel to trigger oral start ─────────
+const _origShowPanel = showPanel;
+window.showPanel = function(id, btn){
+  _origShowPanel(id, btn);
+  if(id==='oral' && !joStarted && joIdx===0){
+    buildJO();
+  }
+};
+
+
+// ─── TEXT TO SPEECH ────────────────────────────────
+const ORAL_TEXT = `Je m'appelle Lucas. J'ai treize ans et j'habite à Lyon avec ma famille. Le matin, je me lève à sept heures. Je mange des céréales et je bois un jus d'orange. Puis je prends le bus avec mon ami Théo. Nous arrivons au collège à huit heures et quart.
+À l'école, j'ai des cours de maths, de français et d'anglais. Mon professeur de maths s'appelle Monsieur Dupont. Il explique très bien. Le midi, je mange à la cantine avec mes amis. Nous mangeons de la salade, du poulet et des fruits.
+L'après-midi, je fais du sport. J'aime beaucoup le football. Mon équipe s'entraîne le mardi et le jeudi. Le soir, je fais mes devoirs et je lis un livre. Ma sœur, elle, regarde la télévision. À vingt et une heures, toute la famille dîne ensemble. Nous parlons de notre journée. Je dors à vingt-deux heures. C'est une journée bien chargée !`;
+
+let ttsSpeaking = false;
+
+function readOralText(){
+  if(!('speechSynthesis' in window)){
+    alert("El teu navegador no admet la lectura en veu alta. Prova Chrome o Edge.");
+    return;
+  }
+  const btn = document.getElementById('tts-btn');
+  if(ttsSpeaking){
+    window.speechSynthesis.cancel();
+    ttsSpeaking = false;
+    btn.textContent = '🔊 Escolta el text';
+    return;
+  }
+  window.speechSynthesis.cancel();
+  const utter = new SpeechSynthesisUtterance(ORAL_TEXT);
+  utter.lang = 'fr-FR';
+  utter.rate = 0.88;
+  utter.pitch = 1;
+  // pick a French voice if available
+  const voices = window.speechSynthesis.getVoices();
+  const frVoice = voices.find(v => v.lang.startsWith('fr'));
+  if(frVoice) utter.voice = frVoice;
+  utter.onstart = () => {
+    ttsSpeaking = true;
+    btn.textContent = '⏹ Atura la lectura';
+  };
+  utter.onend = utter.onerror = () => {
+    ttsSpeaking = false;
+    btn.textContent = '🔊 Escolta el text';
+  };
+  window.speechSynthesis.speak(utter);
+}
+// voices load async in some browsers
+window.speechSynthesis.onvoiceschanged = () => {};
+
+
+// ─── ACCORDION ─────────────────────────────────────
+function toggleAccord(btn){
+  const body = btn.nextElementSibling;
+  const arrow = btn.querySelector('.accord-arrow');
+  const open = body.classList.toggle('open');
+  arrow.style.transform = open ? 'rotate(180deg)' : '';
+  btn.setAttribute('aria-expanded', open);
+}
+
+
+// ─── LOCALSTORAGE AUTOSAVE ──────────────────────────
+const LS_KEY = 'presentIndicatif_v1';
+
+function saveProgress(){
+  const data = {
+    name: document.getElementById('studentName').value || '',
+    group: document.getElementById('studentGroup').value || '',
+    theoryVisited,
+    results: window.__results,
+    joAnswers: window.__joAnswers || {},
+    attempts: window.__attempts || {},
+    savedAt: new Date().toISOString()
+  };
+  try { localStorage.setItem(LS_KEY, JSON.stringify(data)); } catch(e){}
+}
+
+function loadProgress(){
+  try {
+    const raw = localStorage.getItem(LS_KEY);
+    if(!raw) return;
+    const data = JSON.parse(raw);
+    if(data.name) document.getElementById('studentName').value = data.name;
+    if(data.group) document.getElementById('studentGroup').value = data.group;
+    if(data.theoryVisited) theoryVisited = true;
+    if(data.results) window.__results = data.results;
+    if(data.joAnswers) window.__joAnswers = data.joAnswers;
+    if(data.attempts) window.__attempts = data.attempts;
+    updateLocks();
+    buildSummary();
+    // If j1 was completed, restore visual score
+    if(data.results && data.results.j1) updateJ1Score(data.results.j1.score, data.results.j1.total);
+    // Always reset indices so games start from question 1
+    j2Idx = 0; j2Ok = 0; buildJ2();
+    j3Idx = 0; j3Ok = 0; buildJ3();
+    joIdx = 0; joOk = 0;
+    // Restore visual scores from saved results
+    if(data.results && data.results.j2) updateJ2Score();
+    if(data.results && data.results.j3) updateJ3Score();
+    if(data.results && data.results.oral) updateJOScore();
+    // Show restored banner
+    if(data.savedAt){
+      const d = new Date(data.savedAt);
+      const fmt = d.toLocaleDateString('ca-ES') + ' ' + d.toLocaleTimeString('ca-ES',{hour:'2-digit',minute:'2-digit'});
+      toast('Progrés restaurat · ' + fmt);
+    }
+  } catch(e){}
+}
+
+function clearProgress(){
+  if(!confirm('Segur que vols esborrar tot el progrés guardat?')) return;
+  localStorage.removeItem(LS_KEY);
+  location.reload();
+}
+
+// Track attempts per game
+function recordAttempt(game, score, total){
+  if(!window.__attempts) window.__attempts = {};
+  if(!window.__attempts[game]) window.__attempts[game] = [];
+  window.__attempts[game].push({
+    score, total,
+    pct: Math.round(score/total*100),
+    at: new Date().toLocaleTimeString('ca-ES',{hour:'2-digit',minute:'2-digit'})
+  });
+  saveProgress();
+}
+
+// Autosave on name/group input
+['studentName','studentGroup'].forEach(id=>{
+  document.getElementById(id).addEventListener('input', saveProgress);
+});
+
+</script>
+</body>
+</html>
